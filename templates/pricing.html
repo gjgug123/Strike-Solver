@@ -1,0 +1,456 @@
+{% extends "base.html" %}
+
+{% block title %}Pricing - PLUG Pricer{% endblock %}
+
+{% block content %}
+<div class="row g-4">
+    <!-- Left sidebar -->
+    <div class="col-lg-3">
+        <div class="card mb-4">
+            <div class="card-header">Upload File</div>
+            <div class="card-body">
+                <div id="dropZone" class="drop-zone">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    <p class="mb-1">Drop file here or click</p>
+                    <small class="text-muted">.xls, .xlsx, .xlsm, .xlsb</small>
+                </div>
+                <input type="file" id="fileInput" accept=".xls,.xlsx,.xlsm,.xlsb" style="display: none;">
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Today's Files</span>
+                <span class="badge bg-light text-dark" id="fileCount">{{ output_files|length }}</span>
+            </div>
+            <div class="card-body p-2">
+                <div id="fileList" style="max-height: 350px; overflow-y: auto;">
+                    {% for f in output_files %}
+                    <div class="file-list-item" data-filename="{{ f }}">
+                        {% set parts = f.replace('.json', '').split('_') %}
+                        <small>
+                            <strong>{{ parts[0] }}</strong><br>
+                            <span class="text-muted">{{ parts[1] if parts|length > 1 else '' }} {{ parts[2].replace('-',':') if parts|length > 2 else '' }}</span>
+                        </small>
+                    </div>
+                    {% else %}
+                    <p class="text-muted small text-center py-3 mb-0">No files priced today</p>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main content -->
+    <div class="col-lg-9">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Pricing Results</span>
+                <button id="downloadBtn" class="btn btn-success btn-sm" style="display: none;">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="me-1">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="7 10 12 15 17 10"></polyline>
+                        <line x1="12" y1="15" x2="12" y2="3"></line>
+                    </svg>
+                    Download Excel
+                </button>
+            </div>
+            <div class="card-body p-0">
+                <!-- Shares to hedge -->
+                <div id="sharesHedgeContainer" class="p-3 border-bottom" style="display: none;">
+                    <strong class="me-2">Shares to Hedge:</strong>
+                    <span id="sharesHedgeBadges"></span>
+                </div>
+
+                <!-- Rho to hedge by date -->
+                <div id="rhoHedgeContainer" class="p-3 border-bottom" style="display: none;">
+                    <strong class="me-2">Rho to Hedge:</strong>
+                    <span id="rhoHedgeBadges"></span>
+                </div>
+
+                <!-- Vega to hedge by ticker/expiry -->
+                <div id="vegaHedgeContainer" class="p-3 border-bottom" style="display: none;">
+                    <strong class="me-2">Vega to Hedge:</strong>
+                    <span id="vegaHedgeBadges"></span>
+                </div>
+
+                <!-- Package filter -->
+                <div id="packageFilterContainer" class="p-3 border-bottom" style="display: none;">
+                    <div class="d-flex align-items-center flex-wrap">
+                        <strong class="me-2">Filter Packages:</strong>
+                        <button id="selectAllBtn" class="btn btn-sm btn-outline-primary me-2">Select All</button>
+                        <button id="deselectAllBtn" class="btn btn-sm btn-outline-secondary me-3">Deselect All</button>
+                        <span id="packageCheckboxes"></span>
+                    </div>
+                </div>
+
+                <!-- Results table -->
+                <div class="table-container" id="tableContainer" style="display: none;">
+                    <table class="table table-striped table-hover results-table mb-0">
+                        <thead class="sticky-header">
+                            <tr>
+                                <th>Package</th>
+                                <th>Symbol</th>
+                                <th>Date</th>
+                                <th>Strike</th>
+                                <th>Strike %</th>
+                                <th>C/P</th>
+                                <th>Qty</th>
+                                <th>Side</th>
+                                <th>Fair Value</th>
+                                <th>Client Price</th>
+                                <th>Delta</th>
+                                <th>$ Delta</th>
+                                <th>Shares</th>
+                                <th>Vega</th>
+                                <th>Rho</th>
+                                <th>Premium</th>
+                                <th>Cap</th>
+                                <th>Notional</th>
+                                <th>B/O %</th>
+                                <th>Actual B/O</th>
+                                <th>Pkg Vega</th>
+                                <th>Pkg Rho</th>
+                                <th>Pkg $ Delta</th>
+                                <th>Pkg Premium</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsBody"></tbody>
+                    </table>
+                </div>
+
+                <div id="noResults" class="text-center py-5">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" class="text-muted mb-3">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                    </svg>
+                    <p class="text-muted mb-0">Upload an Excel file with PLUG strikes</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let currentFilename = null;
+let allResults = [];
+let selectedPackages = new Set();
+
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    dropZone.classList.remove('dragover');
+    if (e.dataTransfer.files.length > 0) uploadFile(e.dataTransfer.files[0]);
+});
+fileInput.addEventListener('change', (e) => {
+    if (e.target.files.length > 0) uploadFile(e.target.files[0]);
+});
+
+document.querySelectorAll('.file-list-item').forEach(item => {
+    item.addEventListener('click', () => loadFile(item.dataset.filename));
+});
+
+document.getElementById('downloadBtn').addEventListener('click', downloadExcel);
+document.getElementById('selectAllBtn').addEventListener('click', selectAll);
+document.getElementById('deselectAllBtn').addEventListener('click', deselectAll);
+
+async function uploadFile(file) {
+    showLoading('Uploading and pricing...');
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 600000);
+        
+        const response = await fetch('/api/upload', {
+            method: 'POST',
+            body: formData,
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        const data = await response.json();
+        
+        if (data.error) {
+            alert('Error: ' + data.error);
+        } else {
+            currentFilename = data.filename;
+            displayResults(data.results);
+            refreshFileList();
+        }
+    } catch (error) {
+        alert('Upload failed: ' + error.message);
+    } finally {
+        hideLoading();
+    }
+}
+
+async function loadFile(filename) {
+    showLoading('Loading results...');
+    
+    try {
+        const response = await fetch(`/api/get_output/${filename}`);
+        const data = await response.json();
+        
+        if (data.error) {
+            alert('Error: ' + data.error);
+        } else {
+            currentFilename = filename;
+            displayResults(data.results);
+            
+            document.querySelectorAll('.file-list-item').forEach(item => {
+                item.classList.toggle('active', item.dataset.filename === filename);
+            });
+        }
+    } catch (error) {
+        alert('Load failed: ' + error.message);
+    } finally {
+        hideLoading();
+    }
+}
+
+function displayResults(results) {
+    allResults = results;
+    
+    // Build package list
+    const packages = [...new Set(results.filter(r => !r.is_blank && r.package).map(r => r.package))];
+    selectedPackages = new Set(packages);
+    
+    // Build checkboxes
+    const checkboxContainer = document.getElementById('packageCheckboxes');
+    checkboxContainer.innerHTML = packages.map(pkg => 
+        `<label class="me-3"><input type="checkbox" class="package-checkbox me-1" value="${pkg}" checked onchange="filterResults()"> ${pkg}</label>`
+    ).join('');
+    
+    document.getElementById('packageFilterContainer').style.display = packages.length > 0 ? 'block' : 'none';
+    document.getElementById('tableContainer').style.display = 'block';
+    document.getElementById('noResults').style.display = 'none';
+    document.getElementById('downloadBtn').style.display = 'inline-block';
+    
+    renderTable(results);
+    updateHedgeSummaries();
+}
+
+function renderTable(results) {
+    const tbody = document.getElementById('resultsBody');
+    tbody.innerHTML = results.filter(r => r.is_blank || selectedPackages.has(r.package)).map(r => {
+        if (r.is_blank) return '<tr><td colspan="24">&nbsp;</td></tr>';
+        
+        const highlight = r.cap ? 'highlight-plug' : (r.package_total_premium && Math.abs(r.package_total_premium) > 8000000 ? 'highlight-yellow' : '');
+        
+        if (r.error || !r.priced) {
+            return `<tr class="${highlight}"><td>${r.package || ''}</td><td colspan="23" class="text-danger">${r.error || 'Pricing failed'}</td></tr>`;
+        }
+        
+        const strikePct = r.strike_pct ? (r.strike_pct * 100).toFixed(2) + '%' : (r.cap ? (r.cap * 100).toFixed(2) + '%' : '');
+        const capDisplay = r.cap ? (r.cap * 100).toFixed(2) + '%' : '';
+        const boPctDisplay = r.actual_bo_pct != null ? r.actual_bo_pct.toFixed(4) + '%' : '';
+        
+        return `<tr class="${highlight}">
+            <td>${r.package || ''}</td>
+            <td>${r.symbol || ''}</td>
+            <td>${r.date || ''}</td>
+            <td>${r.strike ? formatNumber(r.strike) : ''}</td>
+            <td>${strikePct}</td>
+            <td>${r.call_put || ''}</td>
+            <td>${r.quantity || ''}</td>
+            <td>${r.side || ''}</td>
+            <td>${r.fair_value != null ? formatNumber(r.fair_value) : ''}</td>
+            <td>${r.client_input_price != null ? formatNumber(r.client_input_price) : ''}</td>
+            <td>${r.delta != null ? formatNumber(r.delta, 2) : ''}</td>
+            <td>${r.dollar_delta != null ? formatNumber(r.dollar_delta) : ''}</td>
+            <td>${r.shares_to_hedge != null ? formatNumber(r.shares_to_hedge, 0) : ''}</td>
+            <td>${r.vega != null ? formatNumber(r.vega) : ''}</td>
+            <td>${r.rho != null ? formatNumber(r.rho) : ''}</td>
+            <td>${r.premium != null ? formatNumber(r.premium) : ''}</td>
+            <td><strong>${capDisplay}</strong></td>
+            <td>${r.notional != null ? formatNumber(r.notional) : ''}</td>
+            <td>${boPctDisplay}</td>
+            <td>${r.actual_bo != null ? formatNumber(r.actual_bo) : ''}</td>
+            <td>${r.package_total_vega != null ? formatNumber(r.package_total_vega) : ''}</td>
+            <td>${r.package_total_rho != null ? formatNumber(r.package_total_rho) : ''}</td>
+            <td>${r.package_total_dollar_delta != null ? formatNumber(r.package_total_dollar_delta) : ''}</td>
+            <td>${r.package_total_premium != null ? formatNumber(r.package_total_premium) : ''}</td>
+        </tr>`;
+    }).join('');
+}
+
+function updateHedgeSummaries() {
+    // Shares to hedge by symbol
+    const sharesBySymbol = {};
+    // Rho to hedge by date
+    const rhoByDate = {};
+    // Vega to hedge by ticker|expiry
+    const vegaByTickerExpiry = {};
+    
+    allResults.forEach(r => {
+        if (r.is_blank || !r.priced || !selectedPackages.has(r.package)) return;
+        
+        const symbol = r.symbol;
+        
+        // Shares
+        if (symbol) {
+            if (!sharesBySymbol[symbol]) sharesBySymbol[symbol] = 0;
+            sharesBySymbol[symbol] += r.shares_to_hedge || 0;
+        }
+        
+        // Rho by date - aggregate from rho_by_date if available
+        if (r.rho_by_date) {
+            Object.entries(r.rho_by_date).forEach(([dt, rho]) => {
+                if (!rhoByDate[dt]) rhoByDate[dt] = 0;
+                // Only add once per package (use first row's data)
+                // We'll handle this below
+            });
+        }
+        
+        // Vega by ticker/expiry
+        if (r.vega_by_ticker_expiry) {
+            Object.entries(r.vega_by_ticker_expiry).forEach(([key, vega]) => {
+                if (!vegaByTickerExpiry[key]) vegaByTickerExpiry[key] = 0;
+            });
+        }
+    });
+    
+    // Aggregate properly - use package-level data only once
+    const seenPackagesForRho = new Set();
+    const seenPackagesForVega = new Set();
+    
+    allResults.forEach(r => {
+        if (r.is_blank || !r.priced || !selectedPackages.has(r.package)) return;
+        
+        if (r.rho_by_date && !seenPackagesForRho.has(r.package)) {
+            seenPackagesForRho.add(r.package);
+            Object.entries(r.rho_by_date).forEach(([dt, rho]) => {
+                if (!rhoByDate[dt]) rhoByDate[dt] = 0;
+                rhoByDate[dt] += rho;
+            });
+        }
+        
+        if (r.vega_by_ticker_expiry && !seenPackagesForVega.has(r.package)) {
+            seenPackagesForVega.add(r.package);
+            Object.entries(r.vega_by_ticker_expiry).forEach(([key, vega]) => {
+                if (!vegaByTickerExpiry[key]) vegaByTickerExpiry[key] = 0;
+                vegaByTickerExpiry[key] += vega;
+            });
+        }
+    });
+    
+    // Shares badges
+    const sharesDiv = document.getElementById('sharesHedgeBadges');
+    const symbols = Object.keys(sharesBySymbol).sort();
+    if (symbols.length === 0) {
+        document.getElementById('sharesHedgeContainer').style.display = 'none';
+    } else {
+        document.getElementById('sharesHedgeContainer').style.display = 'block';
+        sharesDiv.innerHTML = symbols.map(symbol => {
+            const shares = sharesBySymbol[symbol];
+            const colorClass = shares > 0 ? 'positive' : (shares < 0 ? 'negative' : 'neutral');
+            const sign = shares > 0 ? '+' : '';
+            return `<span class="shares-badge ${colorClass}">${symbol}: ${sign}${formatNumber(shares, 0)}</span>`;
+        }).join('');
+    }
+    
+    // Rho badges by date
+    const rhoDiv = document.getElementById('rhoHedgeBadges');
+    const dates = Object.keys(rhoByDate).sort();
+    if (dates.length === 0) {
+        document.getElementById('rhoHedgeContainer').style.display = 'none';
+    } else {
+        document.getElementById('rhoHedgeContainer').style.display = 'block';
+        rhoDiv.innerHTML = dates.map(dt => {
+            const rho = rhoByDate[dt];
+            const colorClass = rho > 0 ? 'positive' : (rho < 0 ? 'negative' : 'neutral');
+            const sign = rho > 0 ? '+' : '';
+            // Format date nicely
+            const dateObj = new Date(dt + 'T00:00:00');
+            const dateStr = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            return `<span class="shares-badge ${colorClass}">${dateStr}: ${sign}${formatNumber(rho)}</span>`;
+        }).join('');
+    }
+    
+    // Vega badges by ticker/expiry
+    const vegaDiv = document.getElementById('vegaHedgeBadges');
+    const vegaKeys = Object.keys(vegaByTickerExpiry).sort();
+    if (vegaKeys.length === 0) {
+        document.getElementById('vegaHedgeContainer').style.display = 'none';
+    } else {
+        document.getElementById('vegaHedgeContainer').style.display = 'block';
+        vegaDiv.innerHTML = vegaKeys.map(key => {
+            const vega = vegaByTickerExpiry[key];
+            const [ticker, dt] = key.split('|');
+            const colorClass = vega > 0 ? 'positive' : (vega < 0 ? 'negative' : 'neutral');
+            const sign = vega > 0 ? '+' : '';
+            const dateObj = new Date(dt + 'T00:00:00');
+            const dateStr = dateObj.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+            return `<span class="shares-badge ${colorClass}">${ticker} ${dateStr}: ${sign}${formatNumber(vega)}</span>`;
+        }).join('');
+    }
+}
+
+function filterResults() {
+    selectedPackages.clear();
+    document.querySelectorAll('.package-checkbox:checked').forEach(cb => selectedPackages.add(cb.value));
+    renderTable(allResults);
+    updateHedgeSummaries();
+}
+
+function selectAll() {
+    document.querySelectorAll('.package-checkbox').forEach(cb => cb.checked = true);
+    filterResults();
+}
+
+function deselectAll() {
+    document.querySelectorAll('.package-checkbox').forEach(cb => cb.checked = false);
+    filterResults();
+}
+
+async function downloadExcel() {
+    if (!currentFilename) return;
+    window.location.href = `/api/download_excel/${currentFilename}`;
+}
+
+async function refreshFileList() {
+    try {
+        const response = await fetch('/api/output_files');
+        const files = await response.json();
+        
+        const fileList = document.getElementById('fileList');
+        document.getElementById('fileCount').textContent = files.length;
+        
+        if (files.length === 0) {
+            fileList.innerHTML = '<p class="text-muted small text-center py-3 mb-0">No files priced today</p>';
+        } else {
+            fileList.innerHTML = files.map(f => {
+                const parts = f.replace('.json', '').split('_');
+                const isActive = f === currentFilename ? 'active' : '';
+                return `<div class="file-list-item ${isActive}" data-filename="${f}">
+                    <small>
+                        <strong>${parts[0]}</strong><br>
+                        <span class="text-muted">${parts[1] || ''} ${(parts[2] || '').replace(/-/g, ':')}</span>
+                    </small>
+                </div>`;
+            }).join('');
+            
+            document.querySelectorAll('.file-list-item').forEach(item => {
+                item.addEventListener('click', () => loadFile(item.dataset.filename));
+            });
+        }
+    } catch (error) {
+        console.error('Failed to refresh file list:', error);
+    }
+}
+</script>
+{% endblock %}

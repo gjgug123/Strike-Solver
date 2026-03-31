@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+
+{% block title %}Symbols - PLUG Pricer{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Symbol to RIC Mapping</span>
+                <button id="addSymbolBtn" class="btn btn-primary btn-sm">Add Symbol</button>
+            </div>
+            <div class="card-body">
+                <table class="table table-hover" id="symbolsTable">
+                    <thead>
+                        <tr>
+                            <th>Symbol</th>
+                            <th>RIC</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="symbolsBody">
+                        {% for symbol, ric in symbols.items() %}
+                        <tr data-symbol="{{ symbol }}">
+                            <td><strong>{{ symbol }}</strong></td>
+                            <td>
+                                <input type="text" class="form-control form-control-sm ric-input" value="{{ ric }}">
+                            </td>
+                            <td>
+                                <button class="btn btn-danger btn-sm delete-symbol-btn">Delete</button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                
+                <button id="saveBtn" class="btn btn-success mt-3">Save Changes</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Add Symbol Modal -->
+<div class="modal fade" id="addSymbolModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Add Symbol</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Symbol</label>
+                    <input type="text" id="newSymbol" class="form-control" placeholder="e.g., AAPL">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">RIC</label>
+                    <input type="text" id="newRic" class="form-control" placeholder="e.g., AAPL.O">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="confirmAddBtn">Add</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const addModal = new bootstrap.Modal(document.getElementById('addSymbolModal'));
+
+document.getElementById('addSymbolBtn').addEventListener('click', () => {
+    document.getElementById('newSymbol').value = '';
+    document.getElementById('newRic').value = '';
+    addModal.show();
+});
+
+document.getElementById('confirmAddBtn').addEventListener('click', addSymbol);
+document.getElementById('saveBtn').addEventListener('click', saveSymbols);
+
+document.querySelectorAll('.delete-symbol-btn').forEach(btn => {
+    btn.addEventListener('click', deleteSymbol);
+});
+
+function addSymbol() {
+    const symbol = document.getElementById('newSymbol').value.trim().toUpperCase();
+    const ric = document.getElementById('newRic').value.trim();
+    
+    if (!symbol || !ric) {
+        alert('Please enter both symbol and RIC');
+        return;
+    }
+    
+    if (document.querySelector(`tr[data-symbol="${symbol}"]`)) {
+        alert('Symbol already exists');
+        return;
+    }
+    
+    const tbody = document.getElementById('symbolsBody');
+    const row = document.createElement('tr');
+    row.dataset.symbol = symbol;
+    row.innerHTML = `
+        <td><strong>${symbol}</strong></td>
+        <td><input type="text" class="form-control form-control-sm ric-input" value="${ric}"></td>
+        <td><button class="btn btn-danger btn-sm delete-symbol-btn">Delete</button></td>
+    `;
+    
+    row.querySelector('.delete-symbol-btn').addEventListener('click', deleteSymbol);
+    tbody.appendChild(row);
+    
+    addModal.hide();
+    saveSymbols();
+}
+
+function deleteSymbol(e) {
+    if (confirm('Delete this symbol?')) {
+        e.target.closest('tr').remove();
+        saveSymbols();
+    }
+}
+
+async function saveSymbols() {
+    showLoading('Saving...');
+    
+    try {
+        const symbols = {};
+        document.querySelectorAll('#symbolsBody tr').forEach(row => {
+            const symbol = row.dataset.symbol;
+            const ric = row.querySelector('.ric-input').value.trim();
+            if (symbol && ric) {
+                symbols[symbol] = ric;
+            }
+        });
+        
+        const response = await fetch('/api/save_symbols', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ symbols })
+        });
+        
+        if (response.ok) {
+            console.log('Symbols saved');
+        } else {
+            alert('Save failed');
+        }
+    } catch (error) {
+        alert('Save failed: ' + error.message);
+    } finally {
+        hideLoading();
+    }
+}
+</script>
+{% endblock %}

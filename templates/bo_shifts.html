@@ -1,0 +1,220 @@
+{% extends "base.html" %}
+
+{% block title %}B/O Shifts - PLUG Pricer{% endblock %}
+
+{% block content %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>B/O Shifts (% of Notional by Expiry Month)</span>
+                <div>
+                    <select id="tickerSelect" class="form-select form-select-sm d-inline-block" style="width: auto;">
+                        <option value="">Select Ticker</option>
+                        {% for ticker in tickers %}
+                        <option value="{{ ticker }}">{{ ticker }}</option>
+                        {% endfor %}
+                    </select>
+                    <button id="addTickerBtn" class="btn btn-primary btn-sm ms-2">Add Ticker</button>
+                </div>
+            </div>
+            <div class="card-body">
+                <p class="text-muted small mb-3">
+                    Enter B/O shift as a percentage of notional for each expiry month. 
+                    Example: 0.1 = 0.1% of notional.
+                </p>
+                
+                <div class="table-responsive">
+                    <table class="table table-bordered shift-table" id="shiftsTable">
+                        <thead>
+                            <tr>
+                                <th style="min-width: 100px;">Ticker</th>
+                                {% for month in months %}
+                                <th>{{ month }}</th>
+                                {% endfor %}
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="shiftsBody">
+                            {% for ticker, ticker_shifts in shifts.tickers.items() %}
+                            <tr data-ticker="{{ ticker }}">
+                                <td><strong>{{ ticker }}</strong></td>
+                                {% for month in months %}
+                                <td>
+                                    <input type="number" step="0.0001" class="form-control form-control-sm shift-input"
+                                           data-month="{{ month }}" value="{{ ticker_shifts.get(month, 0) }}">
+                                </td>
+                                {% endfor %}
+                                <td>
+                                    <button class="btn btn-danger btn-sm delete-ticker-btn">Delete</button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div class="mt-3">
+                    <button id="saveBtn" class="btn btn-success">Save All Changes</button>
+                    <button id="pasteBtn" class="btn btn-outline-secondary ms-2">Paste from Excel</button>
+                </div>
+                
+                <!-- Paste modal -->
+                <div class="modal fade" id="pasteModal" tabindex="-1">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">Paste from Excel</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                            </div>
+                            <div class="modal-body">
+                                <p class="small text-muted">
+                                    Paste data with ticker in first column, followed by values for each month.
+                                    Headers are optional.
+                                </p>
+                                <textarea id="pasteArea" class="form-control" rows="10" placeholder="Paste Excel data here..."></textarea>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                <button type="button" class="btn btn-primary" id="applyPasteBtn">Apply</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+const months = {{ months | tojson }};
+
+document.getElementById('addTickerBtn').addEventListener('click', addTicker);
+document.getElementById('saveBtn').addEventListener('click', saveAll);
+document.getElementById('pasteBtn').addEventListener('click', () => {
+    new bootstrap.Modal(document.getElementById('pasteModal')).show();
+});
+document.getElementById('applyPasteBtn').addEventListener('click', applyPaste);
+
+document.querySelectorAll('.delete-ticker-btn').forEach(btn => {
+    btn.addEventListener('click', deleteTicker);
+});
+
+function addTicker() {
+    const select = document.getElementById('tickerSelect');
+    const ticker = select.value;
+    if (!ticker) {
+        alert('Please select a ticker');
+        return;
+    }
+    
+    // Check if already exists
+    if (document.querySelector(`tr[data-ticker="${ticker}"]`)) {
+        alert('Ticker already exists');
+        return;
+    }
+    
+    const tbody = document.getElementById('shiftsBody');
+    const row = document.createElement('tr');
+    row.dataset.ticker = ticker;
+    
+    let html = `<td><strong>${ticker}</strong></td>`;
+    months.forEach(month => {
+        html += `<td><input type="number" step="0.0001" class="form-control form-control-sm shift-input" data-month="${month}" value="0"></td>`;
+    });
+    html += `<td><button class="btn btn-danger btn-sm delete-ticker-btn">Delete</button></td>`;
+    
+    row.innerHTML = html;
+    tbody.appendChild(row);
+    
+    row.querySelector('.delete-ticker-btn').addEventListener('click', deleteTicker);
+    
+    // Reset select
+    select.value = '';
+}
+
+function deleteTicker(e) {
+    if (confirm('Delete this ticker?')) {
+        e.target.closest('tr').remove();
+        saveAll();
+    }
+}
+
+async function saveAll() {
+    showLoading('Saving...');
+    
+    try {
+        const rows = document.querySelectorAll('#shiftsBody tr');
+        
+        for (const row of rows) {
+            const ticker = row.dataset.ticker;
+            const shifts = {};
+            
+            row.querySelectorAll('.shift-input').forEach(input => {
+                shifts[input.dataset.month] = parseFloat(input.value) || 0;
+            });
+            
+            await fetch('/api/save_bo_shifts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ticker, shifts })
+            });
+        }
+        
+        alert('Saved successfully!');
+    } catch (error) {
+        alert('Save failed: ' + error.message);
+    } finally {
+        hideLoading();
+    }
+}
+
+function applyPaste() {
+    const text = document.getElementById('pasteArea').value.trim();
+    if (!text) return;
+    
+    const lines = text.split('\n');
+    const tbody = document.getElementById('shiftsBody');
+    
+    lines.forEach(line => {
+        const parts = line.split('\t');
+        if (parts.length < 2) return;
+        
+        const ticker = parts[0].trim().toUpperCase();
+        if (!ticker || ticker === 'TICKER') return; // Skip header
+        
+        let row = document.querySelector(`tr[data-ticker="${ticker}"]`);
+        if (!row) {
+            // Create new row
+            row = document.createElement('tr');
+            row.dataset.ticker = ticker;
+            
+            let html = `<td><strong>${ticker}</strong></td>`;
+            months.forEach(month => {
+                html += `<td><input type="number" step="0.0001" class="form-control form-control-sm shift-input" data-month="${month}" value="0"></td>`;
+            });
+            html += `<td><button class="btn btn-danger btn-sm delete-ticker-btn">Delete</button></td>`;
+            
+            row.innerHTML = html;
+            tbody.appendChild(row);
+            
+            row.querySelector('.delete-ticker-btn').addEventListener('click', deleteTicker);
+        }
+        
+        // Fill in values
+        const inputs = row.querySelectorAll('.shift-input');
+        for (let i = 0; i < Math.min(parts.length - 1, inputs.length); i++) {
+            const val = parseFloat(parts[i + 1]);
+            if (!isNaN(val)) {
+                inputs[i].value = val;
+            }
+        }
+    });
+    
+    bootstrap.Modal.getInstance(document.getElementById('pasteModal')).hide();
+    document.getElementById('pasteArea').value = '';
+}
+</script>
+{% endblock %}

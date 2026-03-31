@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block title %}Gino's PLUG Pricer{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <div class="card">
+            <div class="card-body text-center py-5">
+                <h1 class="display-5 mb-4">🔌 Gino's PLUG Option Pricer</h1>
+                <p class="lead text-muted mb-4">
+                    Price options packages with PLUG strikes.<br>
+                    All strikes are in % terms. B/O configured as % of notional.
+                </p>
+                
+                <div class="row g-4 justify-content-center mt-4">
+                    <div class="col-md-4">
+                        <div class="card h-100 border">
+                            <div class="card-body">
+                                <h5 class="card-title">📊 Pricing</h5>
+                                <p class="card-text small text-muted">Upload Excel files with PLUG strikes to solve and price</p>
+                                <a href="/pricing" class="btn btn-primary">Go to Pricing</a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card h-100 border">
+                            <div class="card-body">
+                                <h5 class="card-title">💰 B/O Shifts</h5>
+                                <p class="card-text small text-muted">Configure bid/offer as % of notional by ticker & expiry</p>
+                                <a href="/bo_shifts" class="btn btn-outline-primary">Configure Shifts</a>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card h-100 border">
+                            <div class="card-body">
+                                <h5 class="card-title">🏷️ Symbols</h5>
+                                <p class="card-text small text-muted">Manage symbol to RIC mappings</p>
+                                <a href="/symbols" class="btn btn-outline-primary">Manage Symbols</a>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="mt-5 p-4 bg-light rounded">
+                    <h6 class="mb-3">How it works:</h6>
+                    <ol class="text-start small mb-0">
+                        <li>Upload an Excel file with options data (strikes in % terms)</li>
+                        <li>Rows with "PLUG" in the Strike column will be solved</li>
+                        <li>The PLUG strike is found so that: Package Premium + B/O = Notional</li>
+                        <li>B/O is calculated as % of notional from the shift tables</li>
+                        <li>The "Cap" column shows the solved PLUG strike as % of ref price</li>
+                    </ol>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
